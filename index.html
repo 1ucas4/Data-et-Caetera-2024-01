@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<title></title>
+
+	<link rel="stylesheet" href="external_CSS_ressource_URL">
+
+	<style>
+body {
+  background-color: #333;
+  margin: 0;
+}
+
+svg {
+  background-color: #f4f4f4;
+}
+	</style>
+</head>
+<body>
+
+	<div id="my_dataviz" width="400" height="300"></div>
+
+
+	<script src="http://d3js.org/d3.v4.js"></script>
+	<script src="https://d3js.org/d3-scale-chromatic.v1.min.js"></script>
+	<script src="https://d3js.org/d3-geo-projection.v2.min.js"></script>
+
+	<script>
+// Set the dimensions and margins of the graph
+var margin = {
+    top: 80,
+    right: 50,
+    bottom: 0,
+    left: 80
+  },
+  width = 600 - margin.left - margin.right,
+  height = 500 - margin.top - margin.bottom;
+
+var svg = d3.select("body")
+  .append("svg")
+  .attr("width", width + margin.left + margin.right)
+  .attr("height", height + margin.top + margin.bottom)
+  .append("g")
+  .attr("transform", "translate(" + margin.left + "," + margin.top + ")");
+
+var path = d3.geoPath();
+var projection = d3.geoMercator()
+  .scale(90)
+  .center([0, 0])
+  .translate([width / 2, height / 2]);
+
+var data = d3.map();
+var colorScaleWithData = d3.scaleThreshold().domain([63, 65, 70, 75, 80, 85, 90])
+  .range(["#FF0000", "#B22222", "#FF4500", "#FFD700", "#ADFF2F", "#32CD32", "#006400"]);
+
+var colorScaleNoData = d3.scaleLinear().domain([0, 1]).range(["gray", "gray"]); // Gray color for countriesz with no data
+
+var tooltip = d3.select("body").append("div").attr("class", "tooltip").style("opacity", 0);
+
+svg.append("text")
+  .attr("x", width / 2)
+  .attr("y", -margin.top / 1.5)
+  .attr("text-anchor", "middle")
+  .style("font-size", "16px")
+  .style("font-weight", "bold")
+  .style("text-decoration", "underline")
+  .style("font-family", "cursive")
+  .style("font-style", "italic")
+  .text("Life Expectancy per Country in 2021");
+
+var mouseOver = function(d) {
+  d3.selectAll(".Country").transition().duration(200).style("opacity", 0.5);
+  d3.select(this).transition().duration(200).style("opacity", 1).style("stroke", "black");
+
+  tooltip.transition().duration(200).style("opacity", 0.9);
+  var countryData = data.get(d.id);
+  if (countryData) {
+    tooltip.html(countryData.country + "<br/>Lifex: " + countryData.lifex);
+
+    // Get mouse coordinates relative to the body
+    var xPosition = d3.event.pageX;
+    var yPosition = d3.event.pageY;
+
+    // Position the tooltip next to the mouse cursor
+    tooltip.style("left", (xPosition + 10) + "px").style("top", (yPosition - 10) + "px");
+  } else {
+    tooltip.html("No data");
+  }
+};
+var mouseLeave = function() {
+  d3.selectAll(".Country").transition().duration(200).style("opacity", 0.8);
+  d3.select(this).transition().duration(200).style("stroke", "transparent");
+  tooltip.transition().duration(500).style("opacity", 0);
+};
+
+d3.queue()
+  .defer(d3.json, "https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson")
+  .defer(d3.text, "https://docs.google.com/spreadsheets/d/e/2PACX-1vTHRECAQPqtU4AeWWfU015q5U4llhmdL3bxj7zAgir2wwh2dEno6ByEYRrnXNQhqgeeeGpu82S1B5L2/pub?gid=1566990143&single=true&output=csv")
+  .await(function(error, topo, csvData) {
+    if (error) throw error;
+
+    // Filter out Antarctica by checking if id starts with 'ATA'
+    topo.features = topo.features.filter(function(d) {
+      return !d.id || d.id.toUpperCase() !== 'ATA';
+    });
+
+    var parsedData = d3.csvParseRows(csvData, function(d, i) {
+      if (i !== 0) return {
+        code: d[1],
+        country: d[0],
+        lifex: +d[2]
+      };
+    });
+    parsedData.forEach(function(d) {
+      data.set(d.code, d);
+    });
+
+    svg.append("g").selectAll("path").data(topo.features).enter().append("path")
+      .attr("d", path.projection(projection))
+      .attr("class", "Country")
+      .attr("fill", function(d) {
+        var countryData = data.get(d.id);
+        return countryData ? colorScaleWithData(countryData.lifex) : colorScaleNoData(0);
+      })
+      .style("stroke", "transparent")
+      .style("opacity", 0.8)
+      .on("mouseover", mouseOver)
+      .on("mouseleave", mouseLeave);
+  });
+
+	</script>
+	
+</body>
+</html>
